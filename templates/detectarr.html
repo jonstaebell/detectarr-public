@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Detectarr Service Status</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+
+    <style>
+        /* ====== Light Mode Styles ====== */
+        body {
+            background-color: #ffffff;
+            color: #000000;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #00796b;
+        }
+
+        .status span {
+            font-weight: bold;
+        }
+
+        table {
+            width: auto;
+            table-layout: auto;
+            border-collapse: collapse;
+            margin: 20px 0;
+            float: left;
+            background-color: #f5f5f5;
+            color: #000000;
+        }
+
+        th, td {
+            padding: 6px 10px;
+            border: 1px solid #aaa;
+            white-space: nowrap;
+            text-align: left;
+        }
+
+        .green { color: green; }
+        .red { color: red; }
+        .gray { color: gray; }
+        .warning { color: darkred; font-weight: bold; }
+
+        .timestamp {
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        /* ====== Dark Mode Overrides ====== */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #121212;
+                color: #e0e0e0;
+            }
+
+            h1 {
+                color: #80cbc4;
+            }
+
+            table {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+
+            th, td {
+                border: 1px solid #444;
+            }
+
+            .green { color: #81c784; }
+            .red { color: #e57373; }
+            .gray { color: #b0bec5; }
+            .warning { color: #ff8a65; }
+            .timestamp {
+                color: #b0bec5;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Detectarr Service Status</h1>
+
+    <div class="status">
+        <p class="timestamp">Page last refreshed at: <span id="refresh-time"></span></p>
+        <p>Current Time: <span id="clock"></span></p>
+        <p>Car Plugged In: <span class="{{ charging_color }}">{{ charging }}</span></p>
+        <p>CPU Usage: <span>{{ cpu }}%</span></p>
+        <p>Memory Usage: <span>{{ memory.percent }}%</span></p>
+        <p>Boot Disk Usage: <span>{{ disk.percent }}%</span></p>
+        <p>Second Disk Usage: <span>{{ disk2.percent }}%</span></p>
+
+        {% if warnings %}
+            <div class="warning">
+                <p>Warnings:</p>
+                <ul>
+                    {% for warning in warnings %}
+                        <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+
+    <table aria-label="Service status table">
+        <thead>
+            <tr>
+                <th>Machine</th>
+                <th>Service</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for service in services %}
+            <tr>
+                <td class="{{ service.color }}">{{ service.machine }}</td>
+                <td class="{{ service.color }}">{{ service.name }}</td>
+                <td class="{{ service.color }}">{{ service.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        function updateClock() {
+            document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+        }
+
+        function setRefreshTime() {
+            document.getElementById('refresh-time').textContent = new Date().toLocaleTimeString();
+        }
+
+        window.onload = () => {
+            setRefreshTime();
+            updateClock();
+            setInterval(updateClock, 1000);
+        };
+    </script>
+</body>
+</html>
