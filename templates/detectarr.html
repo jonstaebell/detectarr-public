@@ -86,9 +86,7 @@
     <h1>Detectarr Service Status</h1>
 
     <div class="status">
-        <p class="timestamp">Page last refreshed at: <span id="refresh-time"></span></p>
-        <p>Current Time: <span id="clock"></span></p>
-        <p>Car Plugged In: <span class="{{ charging_color }}">{{ charging }}</span></p>
+        <p>Car Plugged In: <span class="{{ charging_color }}">{{ charging }}</span> as of {{ charge_checked_at }}</p>
         <p>CPU Usage: <span>{{ cpu }}%</span></p>
         <p>Memory Usage: <span>{{ memory.percent }}%</span></p>
         <p>Boot Disk Usage: <span>{{ disk.percent }}%</span></p>
@@ -125,20 +123,5 @@
         </tbody>
     </table>
 
-    <script>
-        function updateClock() {
-            document.getElementById('clock').textContent = new Date().toLocaleTimeString();
-        }
-
-        function setRefreshTime() {
-            document.getElementById('refresh-time').textContent = new Date().toLocaleTimeString();
-        }
-
-        window.onload = () => {
-            setRefreshTime();
-            updateClock();
-            setInterval(updateClock, 1000);
-        };
-    </script>
 </body>
 </html>

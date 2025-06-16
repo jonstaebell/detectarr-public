@@ -4,6 +4,7 @@ import psutil
 import paramiko
 import time
 from flask import Flask, render_template
+from python_chargepoint import ChargePoint
 
 # Configuration
 app = Flask(__name__)  # Looks in ./templates by default
@@ -27,23 +28,89 @@ REMOTE_HOST = '192.168.68.150'
 REMOTE_PORT = 22
 SSH_USERNAME = 'pi'
 SSH_PASSWORD = os.getenv('SSH_PASSWORD', 'REPLACE_ME')  # secure this value
-CHARGEPOINT_COMMAND = "/usr/bin/python /home/pi/apps/chargepoint.py n"
 
-def check_remote_command(ssh, command, expected_output):
+CHARGEPOINT_COMMAND = "/usr/bin/python /home/pi/apps/chargepoint.py n" # if using remote
+
+# get Chargepoint username and password from environment variables (if using local)
+username = os.getenv('USERNAME', 'REPLACE_ME')  # secure this value
+password = os.getenv('PASSWORD', 'REPLACE_ME')  # secure this value
+
+def get_status(username,password):
+    # Get status of Chargepoint account with provided credentials on local
+    # use get_status_remote instead to use remote machine to check ChargePoint
+    # Returns (status,color) where:
+        # ("Yes","green") if any charger is in use, 
+        # ("No","red") if no chargers are in use, or
+        # ("Unknown","gray") if an error occurs
+    try:
+        client = ChargePoint(username,password)
+        # Get list of home chargers
+        chargers = client.get_home_chargers()
+
+        # Check if each charger is plugged in
+        for charger_id in chargers:
+            status = client.get_home_charger_status(charger_id)
+            # Access the 'plugged_in' attribute directly
+            if status.plugged_in: # at least one of the chargers is in use
+                return ('Yes','green')
+    except:
+        return ('Unknown','gray') # error accessing ChargePoint account
+
+    return ('No', 'red') # None of the chargers is in use
+
+def get_status_remote(ssh,timeout=5):
+    # Check chargepoint status using remote machine via SSH
+    # Returns (status,color) where:
+    # ("Yes","green") if any charger is in use, 
+    # ("No","red") if no chargers are in use, or
+    # ("Unknown","gray") if an error occurs
+    charging = invoke_remote_command(ssh, CHARGEPOINT_COMMAND, timeout)
+
+    if "True" in charging:
+        return ('Yes','green') # At least one of the chargers is in use
+    else: 
+        if "False" in charging:
+            return ('No', 'red') # None of the chargers is in use
+        else:
+            print (charging)
+            return ('Unknown','gray') # error accessing ChargePoint account
+
+def invoke_remote_command(ssh, command, timeout=5):
+    """
+    Runs command over SSH and returns output.
+    Returns None if it errors out or times out.
+    """
+    try:
+        stdin, stdout, stderr = ssh.exec_command(command)
+        channel = stdout.channel
+        start_time = time.time()
+
+        while not channel.exit_status_ready():
+            if time.time() - start_time > timeout:
+                channel.close()
+                print(f"Timeout exceeded for command: {command}")
+                return None
+            time.sleep(0.1)
+
+        # Optionally check if data is ready
+        output = stdout.read().decode().strip() if stdout.channel.recv_ready() else ""
+        error = stderr.read().decode().strip()
+        if error:
+            print(f"Remote stderr: {error}")
+        return output
+    except Exception as e:
+        print(f"SSH Command Error: {e}")
+        return None
+
+def check_remote_command(ssh, command, expected_output, timeout=5):
     """
     Runs command over SSH and checks if expected_output is in result.
     Returns True if found, False otherwise.
     """
-    try:
-        stdin, stdout, stderr = ssh.exec_command(command)
-        output = stdout.read().decode().strip()
-        error = stderr.read().decode().strip()
-        if error:
-            print(f"Remote error: {error}")
-        return expected_output in output and not error
-    except Exception as e:
-        print(f"SSH Command Error: {e}")
-        return False
+    output = invoke_remote_command(ssh, command, timeout)
+    if output is not None:
+        return expected_output in output
+    return False
 
 def check_local_service(service_name):
     """
@@ -90,15 +157,29 @@ def index():
             'color': color
         })
 
+    # Check chargepoint status if local
+    charge_status, charging_color = get_status(username,password)
+    # Record the time this check was performed
+    charge_checked_at = time.strftime('%B %d, %Y %H:%M:%S')
+    # charge_status, charging_color = ('Unknown','gray') # remote
+
     # Check remote services
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
-        ssh.connect(REMOTE_HOST, port=REMOTE_PORT, username=SSH_USERNAME, password=SSH_PASSWORD)
+        ssh.connect(
+            REMOTE_HOST,
+            port=REMOTE_PORT,
+            username=SSH_USERNAME,
+            password=SSH_PASSWORD,
+            timeout=10  # connection timeout
+        )
+
+        # charge_status, charging_color = get_status_remote(ssh,timeout=5) # remote 
 
         for service in REMOTE_SERVICES:
             command = f"systemctl is-active {service}"
-            active = check_remote_command(ssh, command, "active")
+            active = check_remote_command(ssh, command, "active", timeout=5)  # per-command timeout
             status_data.append({
                 'machine': REMOTE_MACHINE_NAME,
                 'name': service,
@@ -106,15 +187,8 @@ def index():
                 'color': 'green' if active else 'red'
             })
 
-        # Check chargepoint status
-        charging = check_remote_command(ssh, CHARGEPOINT_COMMAND, "True")
-        charge_status = 'Yes' if charging else 'No'
-        charging_color = 'green' if charging else 'red'
-
     except Exception as e:
         print(f"SSH Connection Failed: {e}")
-        charge_status = 'Unknown'
-        charging_color = 'gray'
         for service in REMOTE_SERVICES:
             status_data.append({
                 'machine': REMOTE_MACHINE_NAME,
@@ -134,6 +208,7 @@ def index():
         services=status_data,
         charging=charge_status,
         charging_color=charging_color,
+        charge_checked_at=charge_checked_at,
         warnings=warnings
     )
 
