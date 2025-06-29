@@ -29,6 +29,9 @@ REMOTE_PORT = 22
 SSH_USERNAME = 'pi'
 SSH_PASSWORD = os.getenv('SSH_PASSWORD', 'REPLACE_ME')  # secure this value
 
+# May want to run the chargepoint command on the remote machine instead of the local machine,
+# e.g. if the local machine is on VPN. If so set variables below
+REMOTE_CHARGEPOINT = False # to use chargepoint command on remote machine
 CHARGEPOINT_COMMAND = "/usr/bin/python /home/pi/apps/chargepoint.py n" # if using remote
 
 # get Chargepoint username and password from environment variables (if using local)
@@ -157,12 +160,10 @@ def index():
             'color': color
         })
 
-    # Check chargepoint status if local
-    charge_status, charging_color = get_status(username,password)
-    # Record the time this check was performed
+    # Record the time information was refreshed
     charge_checked_at = time.strftime('%B %d, %Y %H:%M:%S')
-    # charge_status, charging_color = ('Unknown','gray') # remote
-
+    charge_status, charging_color = ('Unknown','gray') # default
+    
     # Check remote services
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -175,7 +176,8 @@ def index():
             timeout=10  # connection timeout
         )
 
-        # charge_status, charging_color = get_status_remote(ssh,timeout=5) # remote 
+        # check chargepoint status, on remote or local, depending on boolean setting
+        charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
         for service in REMOTE_SERVICES:
             command = f"systemctl is-active {service}"

@@ -47,21 +47,34 @@ http://localhost:2525
 
 Edit the detectarr.py file to configure:
 
-    services: List of systemd services to monitor locally
+    PORT_MONITOR = port for the program to monitor
+    HTML_FILE to be used in rendering
+    DISK_ERROR_THRESHOLD as a percent, if more than this is used, warning is displayed
+    LOCAL_MACHINE_NAME = user friendly name
+    LOCAL_SERVICES: List of systemd services to monitor locally
+    REMOTE_SERVICES: List of systemd services to monitor on remote machine
+    REMOTE_HOST, REMOTE_PORT, SSH_USERNAME: For SSH access to a remote machine
 
-    remote_host, username: For SSH access to a remote machine
+    REMOTE_CHARGEPOINT: Set to True if you want to run the chargepoint command on remote machine stead of local
+    (may be useful if local machine is behind VPN)
+    CHARGEPOINT_COMMAND: Python script to check EV charger status on remote machine, if needed
 
-    chargepoint_command: Python script to check EV charger status
+    DISK_BOOT and DISK_SECOND mount points for disks to monitor
 
-    Disk mount points and error thresholds
 
 Example:
-
-services = ["nordvpnd", "sonarr", "radarr"]
-remote_host = '192.168.68.150'
-username = 'pi'
-password = 'your_password'
-chargepoint_command = "/usr/bin/python /home/pi/apps/chargepoint.py n"
+PORT_MONITOR = 2525
+HTML_FILE = 'detectarr.html'
+DISK_ERROR_THRESHOLD = 80  # percent
+LOCAL_MACHINE_NAME = 'MiniMe'
+LOCAL_SERVICES = ["nordvpnd", "sonarr", "radarr"]
+REMOTE_MACHINE_NAME = 'Pi'
+REMOTE_SERVICES = ["pihole-FTL", "simpleserver", "laundry_alarm"]
+REMOTE_HOST = '192.168.68.150'
+REMOTE_PORT = 22
+SSH_USERNAME = 'pi'
+REMOTE_CHARGEPOINT = True
+CHARGEPOINT_COMMAND = "/usr/bin/python /home/pi/apps/chargepoint.py n"
 
 🖥️ Systemd Integration (Optional)
 
