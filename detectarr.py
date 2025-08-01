@@ -20,6 +20,7 @@ LOCAL_SERVICES = [
 ]
 DISK_BOOT = '/'
 DISK_SECOND = '/media/jon/SSD2'
+DISK_THIRD = '/media/jon/HDD'
 
 # Remote machine configuration
 REMOTE_MACHINE_NAME = 'Pi'
@@ -147,8 +148,10 @@ def index():
 
     disk_boot, warn_boot = check_disk_usage(DISK_BOOT)
     disk_second, warn_second = check_disk_usage(DISK_SECOND)
+    disk_third, warn_third = check_disk_usage(DISK_THIRD)
     if warn_boot: warnings.append(warn_boot)
     if warn_second: warnings.append(warn_second)
+    if warn_third: warnings.append(warn_third)
 
     # Check local services
     for service in LOCAL_SERVICES:
@@ -207,6 +210,7 @@ def index():
         memory=memory_info,
         disk=disk_boot,
         disk2=disk_second,
+        disk3=disk_third,
         services=status_data,
         charging=charge_status,
         charging_color=charging_color,

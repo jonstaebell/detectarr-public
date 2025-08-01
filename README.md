@@ -59,7 +59,7 @@ Edit the detectarr.py file to configure:
     (may be useful if local machine is behind VPN)
     CHARGEPOINT_COMMAND: Python script to check EV charger status on remote machine, if needed
 
-    DISK_BOOT and DISK_SECOND mount points for disks to monitor
+    DISK_BOOT, DISK_SECOND, and DISK_THIRD mount points for disks to monitor
 
 
 Example:
