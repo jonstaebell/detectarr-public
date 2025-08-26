@@ -15,8 +15,11 @@ DISK_ERROR_THRESHOLD = 80  # percent
 # Local machine configuration
 LOCAL_MACHINE_NAME = 'MiniMe'
 LOCAL_SERVICES = [
-    "nordvpnd", "qbittorrent-nox@jon", "sonarr", "radarr", "bazarr",
-    "plexmediaserver", "decluttarr", "prowlarr", "jackett", "pihole-FTL"
+    "sonarr", "radarr", "bazarr",
+    "plexmediaserver", "prowlarr", "jackett", "pihole-FTL"
+]
+DOCKER_SERVICES = [
+    "cleanuparr", "whisperai", "qbittorrent", "diun"
 ]
 DISK_BOOT = '/'
 DISK_SECOND = '/media/jon/SSD2'
@@ -127,6 +130,21 @@ def check_local_service(service_name):
     except subprocess.CalledProcessError:
         return ('Not Found', 'red')
 
+  
+def get_docker_status(container_name):
+    """
+    Checks if a Docker container is running.
+    Returns True if running, False otherwise.
+    """
+    try:
+        output = subprocess.check_output(
+            ["docker", "inspect", "-f", "{{.State.Running}}", container_name],
+            stderr=subprocess.STDOUT
+        )
+        return output.decode().strip().lower() == "true"
+    except subprocess.CalledProcessError:
+        return False
+
 def check_disk_usage(disk_path):
     """
     Returns disk usage info and warning message if over threshold.
@@ -159,6 +177,16 @@ def index():
         status_data.append({
             'machine': LOCAL_MACHINE_NAME,
             'name': service,
+            'status': status,
+            'color': color
+        })
+
+    # Check local services
+    for docker in DOCKER_SERVICES:
+        status, color = ('Active','green') if get_docker_status(docker) else ('Inactive','red')
+        status_data.append({
+            'machine': LOCAL_MACHINE_NAME,
+            'name': docker,
             'status': status,
             'color': color
         })
