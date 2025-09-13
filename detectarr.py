@@ -15,7 +15,7 @@ DISK_ERROR_THRESHOLD = 80  # percent
 # Local machine configuration
 LOCAL_MACHINE_NAME = 'MiniMe'
 LOCAL_SERVICES = [
-    "sonarr", "radarr", "bazarr",
+    "sonarr", "radarr", "bazarr", "simpleserver", "tailscaled",
     "plexmediaserver", "prowlarr", "jackett", "pihole-FTL"
 ]
 DOCKER_SERVICES = [
@@ -208,7 +208,8 @@ def index():
         )
 
         # check chargepoint status, on remote or local, depending on boolean setting
-        charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
+        # removed since chargepoint stopped working 9/2/2025
+        # charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
         for service in REMOTE_SERVICES:
             command = f"systemctl is-active {service}"
