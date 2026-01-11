@@ -16,10 +16,10 @@ DISK_ERROR_THRESHOLD = 80  # percent
 LOCAL_MACHINE_NAME = 'MiniMe'
 LOCAL_SERVICES = [
     "sonarr", "radarr", "bazarr", "simpleserver", "tailscaled",
-    "plexmediaserver", "prowlarr", "jackett", "pihole-FTL"
+    "plexmediaserver", "prowlarr", "jackett", "pihole-FTL", "apcupsd", "alarm"
 ]
 DOCKER_SERVICES = [
-    "cleanuparr", "whisperai", "qbittorrent", "diun"
+    "cleanuparr", "whisperai", "qbittorrent", "diun", "flaresolverr", "qbit-vpn-gluetun-1"
 ]
 DISK_BOOT = '/'
 DISK_SECOND = '/media/jon/SSD2'
@@ -28,6 +28,7 @@ DISK_THIRD = '/media/jon/HDD'
 # Remote machine configuration
 REMOTE_MACHINE_NAME = 'Pi'
 REMOTE_SERVICES = ["pihole-FTL", "simpleserver", "laundry_alarm"]
+REMOTE_SERVICES = [] # make blank so remote server not checked
 REMOTE_HOST = '192.168.68.150'
 REMOTE_PORT = 22
 SSH_USERNAME = 'pi'
@@ -120,17 +121,53 @@ def check_remote_command(ssh, command, expected_output, timeout=5):
     return False
 
 def check_local_service(service_name):
-    """
-    Checks local systemd service status.
-    Returns (status_text, color).
-    """
-    try:
-        output = subprocess.check_output(['systemctl', 'status', service_name], text=True)
-        return ('Active', 'green') if 'active (running)' in output else ('Inactive', 'red')
-    except subprocess.CalledProcessError:
-        return ('Not Found', 'red')
+    if not service_name.endswith('.service'):
+        service_name += '.service'
 
-  
+    def get_status_service(command, use_user_env=False):
+        # Create a clean environment copy
+        custom_env = os.environ.copy()
+        
+        if use_user_env:
+            # Manually define the session variables needed for background tasks
+            uid = os.getuid()
+            if 'XDG_RUNTIME_DIR' not in custom_env:
+                custom_env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
+            if 'DBUS_SESSION_BUS_ADDRESS' not in custom_env:
+                custom_env['DBUS_SESSION_BUS_ADDRESS'] = f'unix:path=/run/user/{uid}/bus'
+
+        try:
+            output = subprocess.check_output(
+                command, 
+                text=True,
+                stderr=subprocess.STDOUT,
+                env=custom_env
+            )
+            
+            low_output = output.lower()
+            # Catch 'active (running)', 'active (exited)', or just 'active'
+            if 'active' in low_output and 'inactive' not in low_output:
+                return ('Active', 'green')
+            return ('Inactive', 'red')
+            
+        except subprocess.CalledProcessError as e:
+            # If 'Loaded:' is in output, the service exists but is stopped
+            if 'loaded:' in e.output.lower():
+                return ('Inactive', 'red')
+            return e.output 
+
+    # 1. Try System Level
+    result = get_status_service(['systemctl', 'status', service_name])
+    if isinstance(result, tuple): 
+        return result
+
+    # 2. Try User Level (with explicit environment injection)
+    result = get_status_service(['systemctl', '--user', 'status', service_name], use_user_env=True)
+    if isinstance(result, tuple): 
+        return result
+
+    return ('Not Found', 'red')
+
 def get_docker_status(container_name):
     """
     Checks if a Docker container is running.
@@ -194,44 +231,47 @@ def index():
     # Record the time information was refreshed
     charge_checked_at = time.strftime('%B %d, %Y %H:%M:%S')
     charge_status, charging_color = ('Unknown','gray') # default
-    
-    # Check remote services
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        ssh.connect(
-            REMOTE_HOST,
-            port=REMOTE_PORT,
-            username=SSH_USERNAME,
-            password=SSH_PASSWORD,
-            timeout=10  # connection timeout
-        )
 
-        # check chargepoint status, on remote or local, depending on boolean setting
-        # removed since chargepoint stopped working 9/2/2025
-        # charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
+    if REMOTE_SERVICES:
+        # Check remote services
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(
+                REMOTE_HOST,
+                port=REMOTE_PORT,
+                username=SSH_USERNAME,
+                password=SSH_PASSWORD,
+                timeout=10  # connection timeout
+                )
 
-        for service in REMOTE_SERVICES:
-            command = f"systemctl is-active {service}"
-            active = check_remote_command(ssh, command, "active", timeout=5)  # per-command timeout
-            status_data.append({
-                'machine': REMOTE_MACHINE_NAME,
-                'name': service,
-                'status': 'Active' if active else 'Inactive',
-                'color': 'green' if active else 'red'
-            })
+            # check chargepoint status, on remote or local, depending on boolean setting
+            # removed since chargepoint stopped working 9/2/2025
+            # charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
-    except Exception as e:
-        print(f"SSH Connection Failed: {e}")
-        for service in REMOTE_SERVICES:
-            status_data.append({
-                'machine': REMOTE_MACHINE_NAME,
-                'name': service,
-                'status': 'Connection Failed',
-                'color': 'gray'
-            })
-    finally:
-        ssh.close()
+            for service in REMOTE_SERVICES:
+                command = f"systemctl is-active {service}"
+                active = check_remote_command(ssh, command, "active", timeout=5)  # per-command timeout
+                status_data.append({
+                    'machine': REMOTE_MACHINE_NAME,
+                    'name': service,
+                    'status': 'Active' if active else 'Inactive',
+                    'color': 'green' if active else 'red'
+                })
+
+        except Exception as e:
+            print(f"SSH Connection Failed: {e}")
+
+            for service in REMOTE_SERVICES:
+                status_data.append({
+                    'machine': REMOTE_MACHINE_NAME,
+                    'name': service,
+                    'status': 'Connection Failed',
+                    'color': 'gray'
+                })
+
+        finally:
+            ssh.close()
 
     return render_template(
         HTML_FILE,
