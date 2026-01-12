@@ -231,6 +231,8 @@ def index():
     # Record the time information was refreshed
     charge_checked_at = time.strftime('%B %d, %Y %H:%M:%S')
     charge_status, charging_color = ('Unknown','gray') # default
+    # check chargepoint status, on remote or local, depending on boolean setting
+    charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
     if REMOTE_SERVICES:
         # Check remote services
@@ -244,10 +246,6 @@ def index():
                 password=SSH_PASSWORD,
                 timeout=10  # connection timeout
                 )
-
-            # check chargepoint status, on remote or local, depending on boolean setting
-            # removed since chargepoint stopped working 9/2/2025
-            charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
             for service in REMOTE_SERVICES:
                 command = f"systemctl is-active {service}"
@@ -272,8 +270,6 @@ def index():
 
         finally:
             ssh.close()
-    else:
-        charge_status, charging_color = get_status(username,password)
 
     return render_template(
         HTML_FILE,
