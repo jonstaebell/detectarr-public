@@ -247,7 +247,7 @@ def index():
 
             # check chargepoint status, on remote or local, depending on boolean setting
             # removed since chargepoint stopped working 9/2/2025
-            # charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
+            charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
 
             for service in REMOTE_SERVICES:
                 command = f"systemctl is-active {service}"
@@ -272,6 +272,8 @@ def index():
 
         finally:
             ssh.close()
+    else:
+        charge_status, charging_color = get_status(username,password)
 
     return render_template(
         HTML_FILE,
