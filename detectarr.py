@@ -3,6 +3,7 @@ import subprocess
 import psutil
 import paramiko
 import time
+import asyncio
 from flask import Flask, render_template
 from python_chargepoint import ChargePoint
 
@@ -19,7 +20,7 @@ LOCAL_SERVICES = [
     "plexmediaserver", "prowlarr", "jackett", "pihole-FTL", "apcupsd", "alarm"
 ]
 DOCKER_SERVICES = [
-    "cleanuparr", "whisperai", "qbittorrent", "diun", "flaresolverr", "qbit-vpn-gluetun-1"
+    "cleanuparr", "whisperai", "qbittorrent", "diun", "flaresolverr","gluetun"
 ]
 DISK_BOOT = '/'
 DISK_SECOND = '/media/jon/SSD2'
@@ -34,54 +35,46 @@ REMOTE_PORT = 22
 SSH_USERNAME = 'pi'
 SSH_PASSWORD = os.getenv('SSH_PASSWORD', 'REPLACE_ME')  # secure this value
 
-# May want to run the chargepoint command on the remote machine instead of the local machine,
-# e.g. if the local machine is on VPN. If so set variables below
-REMOTE_CHARGEPOINT = False # to use chargepoint command on remote machine
-CHARGEPOINT_COMMAND = "/usr/bin/python /home/pi/apps/chargepoint.py n" # if using remote
-
-# get Chargepoint username and password from environment variables (if using local)
+# get Chargepoint username and token from environment variables
 username = os.getenv('USERNAME', 'REPLACE_ME')  # secure this value
-password = os.getenv('PASSWORD', 'REPLACE_ME')  # secure this value
+chargepoint_token = os.getenv('CHARGEPOINT_TOKEN', 'REPLACE_ME')  # secure this value
 
-def get_status(username,password):
+def get_status(username, token):
     # Get status of Chargepoint account with provided credentials on local
-    # use get_status_remote instead to use remote machine to check ChargePoint
-    # Returns (status,color) where:
-        # ("Yes","green") if any charger is in use, 
-        # ("No","red") if no chargers are in use, or
-        # ("Unknown","gray") if an error occurs
-    try:
-        client = ChargePoint(username,password)
-        # Get list of home chargers
-        chargers = client.get_home_chargers()
-
-        # Check if each charger is plugged in
-        for charger_id in chargers:
-            status = client.get_home_charger_status(charger_id)
-            # Access the 'plugged_in' attribute directly
-            if status.plugged_in: # at least one of the chargers is in use
-                return ('Yes','green')
-    except:
-        return ('Unknown','gray') # error accessing ChargePoint account
-
-    return ('No', 'red') # None of the chargers is in use
-
-def get_status_remote(ssh,timeout=5):
-    # Check chargepoint status using remote machine via SSH
     # Returns (status,color) where:
     # ("Yes","green") if any charger is in use, 
     # ("No","red") if no chargers are in use, or
     # ("Unknown","gray") if an error occurs
-    charging = invoke_remote_command(ssh, CHARGEPOINT_COMMAND, timeout)
+    
+    async def _fetch_status():
+        client = None
+        try:
+            client = await ChargePoint.create(
+                username=username, 
+                coulomb_token=token
+            )
+            
+            chargers = await client.get_home_chargers()
 
-    if "True" in charging:
-        return ('Yes','green') # At least one of the chargers is in use
-    else: 
-        if "False" in charging:
-            return ('No', 'red') # None of the chargers is in use
-        else:
-            print (charging)
-            return ('Unknown','gray') # error accessing ChargePoint account
+            # Check if each charger is plugged in
+            for charger_id in chargers:
+                status_obj = await client.get_home_charger_status(charger_id)
+                
+                if status_obj.is_plugged_in:
+                    return ('Yes', 'green')
+                    
+            return ('No', 'red')
+            
+        except Exception as e:
+            print(f"Error accessing ChargePoint account: {e}")
+            return ('Unknown', 'gray')
+            
+        finally:
+            if client:
+                await client.close()
+
+    # Run the async function synchronously for Flask
+    return asyncio.run(_fetch_status())
 
 def invoke_remote_command(ssh, command, timeout=5):
     """
@@ -231,8 +224,7 @@ def index():
     # Record the time information was refreshed
     charge_checked_at = time.strftime('%B %d, %Y %H:%M:%S')
     charge_status, charging_color = ('Unknown','gray') # default
-    # check chargepoint status, on remote or local, depending on boolean setting
-    charge_status, charging_color = get_status_remote(ssh,timeout=5) if REMOTE_CHARGEPOINT else get_status(username,password)
+    charge_status, charging_color = get_status(username, chargepoint_token)
 
     if REMOTE_SERVICES:
         # Check remote services
